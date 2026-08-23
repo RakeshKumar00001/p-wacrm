@@ -197,7 +197,7 @@
                                         <span>Internal Private Note</span>
                                         <span class="text-[9px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-extrabold uppercase border border-amber-200/50">By {{ \App\Models\User::find($msg->sender_id)->name ?? 'Agent' }}</span>
                                     </span>
-                                    <span class="opacity-75 font-semibold text-[9px] text-amber-700">{{ $msg->created_at->format('M d, H:i') }}</span>
+                                    <span class="opacity-75 font-semibold text-[9px] text-amber-700">{{ $msg->created_at->timezone(auth()->user()->business->timezone ?? 'Asia/Kolkata')->format('M d, H:i') }}</span>
                                 </div>
                                 <p class="text-xs font-semibold leading-relaxed text-amber-950">{{ $msg->content }}</p>
                             </div>
@@ -228,7 +228,7 @@
                                     <p class="text-xs sm:text-sm font-medium leading-relaxed whitespace-pre-line">{{ $msg->content }}</p>
                                 @endif
                                 <div class="text-right mt-1.5 flex items-center justify-end space-x-1 opacity-60">
-                                    <span class="text-[8px] font-bold uppercase tracking-wider">{{ $msg->created_at->format('H:i') }}</span>
+                                    <span class="text-[8px] font-bold uppercase tracking-wider">{{ $msg->created_at->timezone(auth()->user()->business->timezone ?? 'Asia/Kolkata')->format('H:i') }}</span>
                                     @if($msg->sender_type === 'ai')
                                         <span class="text-[8px] font-bold bg-indigo-500/10 px-1.5 py-0.5 rounded text-indigo-650 border border-indigo-500/15">AI</span>
                                     @endif

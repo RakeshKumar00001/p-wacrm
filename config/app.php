@@ -1,5 +1,7 @@
 <?php
 
+date_default_timezone_set(env('APP_TIMEZONE', 'Asia/Kolkata'));
+
 return [
 
     /*
