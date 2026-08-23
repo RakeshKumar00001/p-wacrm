@@ -29,9 +29,12 @@
                 {{-- Stage Header --}}
                 <div class="p-4 border-b border-slate-100 font-bold flex justify-between items-center"
                      style="border-top: 4px solid {{ $stage->color ?? '#3B82F6' }}; border-top-left-radius: 1rem; border-top-right-radius: 1rem;">
-                    <span class="text-slate-800 text-sm font-extrabold tracking-wide">{{ $stage->name }}</span>
-                    <span class="bg-slate-200/60 text-slate-650 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
-                        {{ isset($leadsGrouped[$stage->id]) ? count($leadsGrouped[$stage->id]) : 0 }}
+                    @php $leadCount = isset($leadsGrouped[$stage->id]) ? count($leadsGrouped[$stage->id]) : 0; @endphp
+                    <span class="text-slate-800 text-sm font-extrabold tracking-wide">
+                        {{ $stage->name }} <span class="text-slate-500 font-bold font-mono text-xs ml-0.5">({{ $leadCount }})</span>
+                    </span>
+                    <span class="bg-slate-200/60 text-slate-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
+                        {{ $currencySymbol }}{{ number_format(isset($leadsGrouped[$stage->id]) ? $leadsGrouped[$stage->id]->sum('expected_value') : 0, 0) }}
                     </span>
                 </div>
 
