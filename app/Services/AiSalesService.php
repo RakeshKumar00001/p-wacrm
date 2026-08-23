@@ -6,6 +6,7 @@ use App\Models\Conversation;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class AiSalesService
 {
@@ -78,10 +79,18 @@ class AiSalesService
         3. SOFT LEAD RE-CONVERSION: Slowly and warmly engage with the customer to guide them back into the business pipeline (clarifying their requirements, budget, or next steps) without sounding pushy or aggressive. Act like an empathetic human sales consultant.
 
         Respond ONLY in raw JSON format with the following keys:
+        - contact_name (string or null: customer's real full name if shared in chat, e.g. 'Rakesh Kumar')
+        - contact_email (string or null: customer's email address if shared in chat, e.g. 'user@example.com')
+        - contact_company (string or null: customer's company name if shared in chat)
+        - contact_designation (string or null: customer's job title or role if shared in chat)
+        - contact_city (string or null: customer's city if shared in chat)
+        - contact_state (string or null: customer's state if shared in chat)
+        - contact_country (string or null: customer's country if shared in chat)
+        - req_product (string or null: product/service customer expressed interest in)
+        - req_budget (string or null: customer's budget)
+        - req_timeline (string or null: customer's urgency/timeline)
+        - expected_value (number or null: estimated deal value if mentioned)
         - lead_score (integer 0-100)
-        - req_product (string or null)
-        - req_budget (string or null)
-        - req_timeline (string or null)
         - recommended_stage (string from: 'New Lead', 'Qualified', 'Quotation Sent')
         - handoff_required (boolean: true ONLY IF the customer's LATEST message asks to speak to a human agent or expresses anger right now. Do NOT mark true if a human agent has already responded to past requests or if AI was re-enabled.)
         - next_reply (string: your warm, contextual, language-matched response to the customer)
@@ -209,11 +218,70 @@ class AiSalesService
 
     protected function applyAiResults(Conversation $conversation, Lead $lead, array $result)
     {
-        // Update Lead Qualification
-        $lead->lead_score = $result['lead_score'] ?? $lead->lead_score;
-        $lead->req_product = $result['req_product'] ?? $lead->req_product;
-        $lead->req_budget = $result['req_budget'] ?? $lead->req_budget;
-        $lead->req_timeline = $result['req_timeline'] ?? $lead->req_timeline;
+        // 1. Auto-fill Contact identity & location details shared by user
+        $contact = $conversation->contact;
+        if ($contact) {
+            $updatedContact = false;
+
+            if (!empty($result['contact_name'])) {
+                $newName = trim($result['contact_name']);
+                if (empty($contact->name) || str_contains(strtolower($contact->name), 'guest') || str_contains(strtolower($contact->name), 'unknown') || strlen($contact->name) < 3 || strtolower($contact->name) !== strtolower($newName)) {
+                    $contact->name = $newName;
+                    $updatedContact = true;
+                }
+            }
+
+            if (!empty($result['contact_email']) && filter_var($result['contact_email'], FILTER_VALIDATE_EMAIL)) {
+                $contact->email = trim($result['contact_email']);
+                $updatedContact = true;
+            }
+
+            if (!empty($result['contact_company'])) {
+                $contact->company = trim($result['contact_company']);
+                $updatedContact = true;
+            }
+
+            if (!empty($result['contact_designation']) && Schema::hasColumn('contacts', 'designation')) {
+                $contact->designation = trim($result['contact_designation']);
+                $updatedContact = true;
+            }
+
+            if (!empty($result['contact_city']) && Schema::hasColumn('contacts', 'city')) {
+                $contact->city = trim($result['contact_city']);
+                $updatedContact = true;
+            }
+
+            if (!empty($result['contact_state']) && Schema::hasColumn('contacts', 'state')) {
+                $contact->state = trim($result['contact_state']);
+                $updatedContact = true;
+            }
+
+            if (!empty($result['contact_country']) && Schema::hasColumn('contacts', 'country')) {
+                $contact->country = trim($result['contact_country']);
+                $updatedContact = true;
+            }
+
+            if ($updatedContact) {
+                $contact->save();
+            }
+        }
+
+        // 2. Auto-fill Lead qualification & details
+        if (isset($result['lead_score']) && is_numeric($result['lead_score'])) {
+            $lead->lead_score = (int) $result['lead_score'];
+        }
+        if (!empty($result['req_product'])) {
+            $lead->req_product = trim($result['req_product']);
+        }
+        if (!empty($result['req_budget'])) {
+            $lead->req_budget = trim($result['req_budget']);
+        }
+        if (!empty($result['req_timeline'])) {
+            $lead->req_timeline = trim($result['req_timeline']);
+        }
+        if (isset($result['expected_value']) && is_numeric($result['expected_value']) && $result['expected_value'] > 0) {
+            $lead->expected_value = (float) $result['expected_value'];
+        }
         $lead->save();
 
         // Lead stage auto-updating
