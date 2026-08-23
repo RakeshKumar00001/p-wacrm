@@ -45,10 +45,33 @@ class AiSalesService
             $chatHistory .= "{$sender}: {$msg->content}\n";
         }
 
-        $systemPrompt = $business->ai_system_prompt ?? "You are a sales qualification AI. Extract structured data from the conversation.";
+        $timezone = $business->timezone ?? 'UTC';
+        $localHour = now()->timezone($timezone)->hour;
+        $timeGreeting = 'Hello';
+        if ($localHour >= 5 && $localHour < 12) {
+            $timeGreeting = 'Good morning';
+        } elseif ($localHour >= 12 && $localHour < 17) {
+            $timeGreeting = 'Good afternoon';
+        } elseif ($localHour >= 17 && $localHour < 21) {
+            $timeGreeting = 'Good evening';
+        }
+
+        $contactName = $conversation->contact?->name ?? 'Customer';
+
+        $systemPrompt = $business->ai_system_prompt ?? "You are a sales qualification AI. Extract structured data and communicate like a helpful human sales consultant.";
         
         $prompt = "
-        Analyze the following conversation and extract lead qualification details (BANT).
+        Analyze the following WhatsApp conversation, qualify the lead, and write the next response to the customer.
+
+        Context & Rules:
+        - Time-of-Day Greeting Context: {$timeGreeting}
+        - Customer Name: {$contactName}
+
+        CRITICAL RESPONSE INSTRUCTIONS (for `next_reply`):
+        1. LANGUAGE MATCHING: Carefully examine the customer's previous messages in the conversation history. Detect the customer's exact language, script, and dialect (e.g. Hinglish in Roman script like 'bhai deal ka kya hua', pure Hindi in Devanagari, English, Spanish, etc.). You MUST write your reply in that EXACT same language, script, and vocabulary.
+        2. CONTEXTUAL RE-ENGAGEMENT: If the customer is replying after a re-engagement nudge or after a pause, reference what was previously discussed in the last chats ('what's going on with their product interest or deal').
+        3. SOFT LEAD RE-CONVERSION: Slowly and warmly engage with the customer to guide them back into the business pipeline (clarifying their requirements, budget, or next steps) without sounding pushy or aggressive. Act like an empathetic human sales consultant.
+
         Respond ONLY in raw JSON format with the following keys:
         - lead_score (integer 0-100)
         - req_product (string or null)
@@ -56,7 +79,7 @@ class AiSalesService
         - req_timeline (string or null)
         - recommended_stage (string from: 'New Lead', 'Qualified', 'Quotation Sent')
         - handoff_required (boolean: true ONLY IF the customer's LATEST message asks to speak to a human agent or expresses anger right now. Do NOT mark true if a human agent has already responded to past requests or if AI was re-enabled.)
-        - next_reply (string: your suggested response to the customer)
+        - next_reply (string: your warm, contextual, language-matched response to the customer)
 
         Conversation:
         {$chatHistory}
