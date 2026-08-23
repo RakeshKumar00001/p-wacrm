@@ -23,3 +23,5 @@ yarn-error.log
 /.vscode
 *.zip
 composer.phar
+*.sqlite
+database/*.sqlite
