@@ -38,7 +38,12 @@ class AiSalesService
             } elseif ($msg->sender_type === 'ai') {
                 $sender = 'AI Agent';
             } elseif ($msg->sender_type === 'agent') {
-                $sender = 'Human Agent';
+                $sender = 'Human Agent (Handover Resolved)';
+            } elseif ($msg->sender_type === 'system') {
+                if (str_contains(strtolower($msg->content), 're-enabled') || str_contains(strtolower($msg->content), 'reactivated')) {
+                    $chatHistory .= "[System Note: AI was re-enabled by Human Agent. Previous human handovers are COMPLETED and RESOLVED.]\n";
+                }
+                continue;
             } else {
                 continue;
             }
@@ -160,6 +165,38 @@ class AiSalesService
             }
 
             if ($result) {
+                // Safeguard: Check customer's LATEST message before allowing AI disable
+                if (!empty($result['handoff_required'])) {
+                    $latestContactMsg = $conversation->messages()
+                        ->where('sender_type', 'contact')
+                        ->latest()
+                        ->first();
+
+                    $latestText = strtolower(trim($latestContactMsg?->content ?? ''));
+                    $handoffKeywords = [
+                        'talk to agent', 'human agent', 'talk to human', 'speak to agent', 
+                        'speak with human', 'representative', 'connect me to human', 
+                        'agent please', 'human please', 'handover', 'talk to a human', 
+                        'speak to a human', 'real person', 'human support', 'connect to agent',
+                        'support team', 'transfer to agent', 'person please', 'live agent',
+                        'human', 'agent'
+                    ];
+
+                    $hasHandoffKeyword = false;
+                    foreach ($handoffKeywords as $kw) {
+                        if (str_contains($latestText, $kw)) {
+                            $hasHandoffKeyword = true;
+                            break;
+                        }
+                    }
+
+                    // If latest customer message has NO explicit handoff request, override handoff_required to false!
+                    if (!$hasHandoffKeyword) {
+                        Log::info("AI Handoff Safeguard: Overriding LLM handoff_required to false because latest message ('{$latestText}') contains no handoff request.");
+                        $result['handoff_required'] = false;
+                    }
+                }
+
                 $this->applyAiResults($conversation, $lead, $result);
                 return $result;
             }
