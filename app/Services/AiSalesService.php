@@ -73,6 +73,19 @@ class AiSalesService
         - Time-of-Day Greeting Context: {$timeGreeting}
         - Customer Name: {$contactName}
 
+        CRITICAL CONTACT & LEAD FIELD EXTRACTION RULES:
+        Scan the entire conversation history carefully for personal, contact, and lead details shared by the customer. If the customer mentions or shares any of the following details anywhere:
+        - Full Name (e.g., 'Mera naam Rakesh hai', 'I am Rahul', 'My name is...') -> extract clean name into `contact_name`
+        - Email Address (e.g., 'user@gmail.com') -> extract into `contact_email`
+        - Company / Business Name (e.g., 'Acme Corp', 'Tech Services') -> extract into `contact_company`
+        - Job Title / Role (e.g., 'CEO', 'Director', 'Sales Manager') -> extract into `contact_designation`
+        - City / Location (e.g., 'Mumbai', 'Delhi', 'Bangalore', 'New York') -> extract into `contact_city`
+        - State / Country -> extract into `contact_state` / `contact_country`
+        - Product / Service Interested (e.g., 'WhatsApp CRM', 'Software') -> extract into `req_product`
+        - Budget (e.g., '50,000 INR', '1000 USD', '1 lakh') -> extract into `req_budget`
+        - Timeline / Urgency (e.g., 'Immediate', 'this week', 'next month') -> extract into `req_timeline`
+        - Monetary Deal Value (number) -> extract numeric amount into `expected_value`
+
         CRITICAL RESPONSE INSTRUCTIONS (for `next_reply`):
         1. LANGUAGE MATCHING: Carefully examine the customer's previous messages in the conversation history. Detect the customer's exact language, script, and dialect (e.g. Hinglish in Roman script like 'bhai deal ka kya hua', pure Hindi in Devanagari, English, Spanish, etc.). You MUST write your reply in that EXACT same language, script, and vocabulary.
         2. CONTEXTUAL RE-ENGAGEMENT: If the customer is replying after a re-engagement nudge or after a pause, reference what was previously discussed in the last chats ('what's going on with their product interest or deal').
@@ -119,7 +132,7 @@ class AiSalesService
                 ]);
 
                 if ($response->successful()) {
-                    $result = json_decode($response->json('choices')[0]['message']['content'], true);
+                    $result = $this->parseJsonResponse($response->json('choices.0.message.content'));
                 } else {
                     Log::error("OpenAI qualification error: " . $response->body());
                 }
@@ -149,7 +162,7 @@ class AiSalesService
 
                 if ($response->successful()) {
                     $content = $response->json('candidates.0.content.parts.0.text') ?? '{}';
-                    $result = json_decode($content, true);
+                    $result = $this->parseJsonResponse($content);
                 } else {
                     Log::error("Gemini qualification error: " . $response->body());
                 }
@@ -167,7 +180,7 @@ class AiSalesService
                 ]);
 
                 if ($response->successful()) {
-                    $result = json_decode($response->json('choices')[0]['message']['content'], true);
+                    $result = $this->parseJsonResponse($response->json('choices.0.message.content'));
                 } else {
                     Log::error("DeepSeek qualification error: " . $response->body());
                 }
@@ -369,5 +382,38 @@ class AiSalesService
 
             \App\Jobs\SendWhatsAppMessageJob::dispatchSync($aiMessage);
         }
+    }
+
+    /**
+     * Clean and parse raw JSON string from AI responses, stripping markdown codeblocks if present.
+     */
+    protected function parseJsonResponse($rawContent): ?array
+    {
+        if (is_array($rawContent)) {
+            return $rawContent;
+        }
+        if (empty($rawContent) || !is_string($rawContent)) {
+            return null;
+        }
+
+        $clean = trim($rawContent);
+        // Strip markdown backticks (e.g. ```json ... ```)
+        $clean = preg_replace('/^```(?:json)?\s*/i', '', $clean);
+        $clean = preg_replace('/\s*```$/i', '', $clean);
+        $clean = trim($clean);
+
+        $decoded = json_decode($clean, true);
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        if (preg_match('/\{.*\}/s', $clean, $matches)) {
+            $decoded = json_decode($matches[0], true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return null;
     }
 }
